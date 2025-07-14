@@ -40,7 +40,7 @@ def get_farming_advice(weather_data):
 
 Код
 
-Предварительный просмотр
+# Предварительный просмотр
 $0    response = requests.post("https://api.x.ai/v1/grok", json={"prompt": prompt}, headers=headers)
     if response.status_code == 200:
         return response.json().get("response", "Следите за погодой и поливайте культуры.")
