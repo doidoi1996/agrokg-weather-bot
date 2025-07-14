@@ -99,12 +99,15 @@ async def daily_weather(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 # Основная функция
 async def main():
-    app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-    
-    # Добавление обработчиков
-    app.add_handler(CommandHandler("start", start))
+    app = Application.builder().token(TELEGRAM_BOT_TOKEN).job_queue(True).build()
+
+    app.add_handler(CommandHandler("start", start))  # ← должен быть такой же отступ
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_handler(CallbackQueryHandler(button))
+
+    app.job_queue.run_daily(daily_weather, time=dt_time(hour=7, minute=0))
+
+    await app.run_polling()
     
     # Планирование ежедневных сообщений
     app.job_queue.run_daily(daily_weather, time=time(hour=7, minute=0))
