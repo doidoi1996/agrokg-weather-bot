@@ -33,17 +33,20 @@ def get_weather(city):
 
 # Рекомендации от xAI
 def get_farming_advice(weather_data):
-    prompt = f"Погода: температура {weather_data['temp']}°C, {weather_data['description']}, влажность {weather_data['humidity']}%. Дай краткие рекомендации для фермеров."
-    headers = {"Authorization": f"Bearer {XAI_API_KEY}", "Content-Type": "application/json"}
-
-
-
-Код
-
-# Предварительный просмотр
-$0    response = requests.post("https://api.x.ai/v1/grok", json={"prompt": prompt}, headers=headers)
-    if response.status_code == 200:
-        return response.json().get("response", "Следите за погодой и поливайте культуры.")
+    prompt = (
+        f"Погода: температура {weather_data['temp']}°C, {weather_data['description']}, "
+        f"влажность {weather_data['humidity']}%. Дай краткие рекомендации для фермеров."
+    )
+    headers = {
+        "Authorization": f"Bearer {XAI_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    try:
+        response = requests.post("https://api.x.ai/v1/grok ", json={"prompt": prompt}, headers=headers)
+        if response.status_code == 200:
+            return response.json().get("response", "Следите за погодой и поливайте культуры.")
+    except Exception as e:
+        print(f"Ошибка при обращении к XAI API: {e}")
     return "Следите за погодой и поливайте культуры."
 
 # Форматирование сообщения о погоде
