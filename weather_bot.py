@@ -1,23 +1,31 @@
 import asyncio
 import os
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-import requests
-from datetime import datetime
-from time import time
+from datetime import datetime, time as dt_time  # Импортируем time как dt_time
 
-# Конфигурация
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    filters,
+    ContextTypes,
+    CallbackQueryHandler  # ← Добавлен недостающий импорт
+)
+
+import requests
+
+# === Конфигурация ===
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "7303047610:AAHraj24cjD94JTOGb-9ncD9RY0GG1QO-j4")
 TELEGRAM_CHANNEL_ID = os.getenv("TELEGRAM_CHANNEL_ID", "@agrokg_msh")
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY", "31f0e42c1bc0d2e6301f9d0452b75ad1")
 XAI_API_KEY = os.getenv("XAI_API_KEY", "xai-I7OLtQjEl3G2WUeEVmevXucGwByarxvvxWdcKXtr6N7DJFxnGLpIwepVDLc59gJuE34L47n7XWCECdx5")
 
-# Города для кнопок
+# === Города для кнопок ===
 CITIES = ["Бишкек", "Аламедин", "Чуй", "Сокулук"]
 
-# Получение прогноза погоды
+# === Получение прогноза погоды ===
 def get_weather(city):
-    url = f"http://api.openweathermap.org/data/2.5/weather?q={city},KG&appid={OPENWEATHER_API_KEY}&units=metric&lang=ru"
+    url = f"https://api.openweathermap.org/data/2.5/weather?q={city},KG&appid={OPENWEATHER_API_KEY}&units=metric&lang=ru"
     response = requests.get(url)
     if response.status_code == 200:
         data = response.json()
@@ -31,7 +39,7 @@ def get_weather(city):
         }
     return None
 
-# Рекомендации от xAI
+# === Рекомендации от xAI ===
 def get_farming_advice(weather_data):
     prompt = (
         f"Погода: температура {weather_data['temp']}°C, {weather_data['description']}, "
@@ -42,14 +50,14 @@ def get_farming_advice(weather_data):
         "Content-Type": "application/json"
     }
     try:
-        response = requests.post("https://api.x.ai/v1/grok ", json={"prompt": prompt}, headers=headers)
+        response = requests.post(" https://api.x.ai/v1/grok ", json={"prompt": prompt}, headers=headers)
         if response.status_code == 200:
             return response.json().get("response", "Следите за погодой и поливайте культуры.")
     except Exception as e:
         print(f"Ошибка при обращении к XAI API: {e}")
     return "Следите за погодой и поливайте культуры."
 
-# Форматирование сообщения о погоде
+# === Форматирование сообщения о погоде ===
 def format_weather_message(city, weather_data, advice):
     return (
         f"🌤️ Прогноз погоды в {city} на {datetime.now().strftime('%d.%m.%Y')}:\n"
@@ -61,13 +69,13 @@ def format_weather_message(city, weather_data, advice):
         f"🌾 Рекомендации для фермеров:\n{advice}"
     )
 
-# Команда /start
+# === Команда /start ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     keyboard = [[InlineKeyboardButton(city, callback_data=city)] for city in CITIES]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text("Выберите город:", reply_markup=reply_markup)
 
-# Обработка текстовых сообщений
+# === Обработка текстовых сообщений ===
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     city = update.message.text.strip()
     weather_data = get_weather(city)
@@ -78,7 +86,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     else:
         await update.message.reply_text(f"Не удалось получить прогноз для {city}. Проверьте название города.")
 
-# Обработка кнопок
+# === Обработка кнопок ===
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
@@ -91,7 +99,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     else:
         await query.message.reply_text(f"Не удалось получить прогноз для {city}.")
 
-# Отправка ежедневного прогноза в канал
+# === Ежедневная рассылка в канал ===
 async def daily_weather(context: ContextTypes.DEFAULT_TYPE) -> None:
     for city in CITIES:
         weather_data = get_weather(city)
@@ -100,21 +108,18 @@ async def daily_weather(context: ContextTypes.DEFAULT_TYPE) -> None:
             message = format_weather_message(city, weather_data, advice)
             await context.bot.send_message(chat_id=TELEGRAM_CHANNEL_ID, text=message)
 
-# Основная функция
+# === Основная функция запуска бота ===
 async def main():
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).job_queue(True).build()
 
-    app.add_handler(CommandHandler("start", start))  # ← должен быть такой же отступ
+    # Добавление обработчиков
+    app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_handler(CallbackQueryHandler(button))
 
+    # Планирование ежедневных сообщений
     app.job_queue.run_daily(daily_weather, time=dt_time(hour=7, minute=0))
 
-    await app.run_polling()
-    
-    # Планирование ежедневных сообщений
-    app.job_queue.run_daily(daily_weather, time=time(hour=7, minute=0))
-    
     # Запуск бота
     await app.run_polling()
 
