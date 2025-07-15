@@ -125,5 +125,11 @@ async def main():
     await app.run_polling()
 
 if __name__ == "__main__":
-    # Запускаем приложение напрямую, без управления циклом
-    asyncio.ensure_future(main())
+    try:
+        asyncio.run(main())
+    except RuntimeError as e:
+        if str(e) == "This event loop is already running":
+            # Если цикл уже запущен, используем ensure_future
+            asyncio.ensure_future(main())
+        else:
+            raise e
