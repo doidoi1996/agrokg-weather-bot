@@ -1,6 +1,6 @@
 import asyncio
 import os
-from datetime import datetime, time as dt_time  # Импортируем time как dt_time
+from datetime import datetime, time as dt_time, timezone, timedelta
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -9,7 +9,7 @@ from telegram.ext import (
     MessageHandler,
     filters,
     ContextTypes,
-    CallbackQueryHandler  # ← Добавлен недостающий импорт
+    CallbackQueryHandler
 )
 
 import requests
@@ -50,7 +50,7 @@ def get_farming_advice(weather_data):
         "Content-Type": "application/json"
     }
     try:
-        response = requests.post(" https://api.x.ai/v1/grok ", json={"prompt": prompt}, headers=headers)
+        response = requests.post("https://api.x.ai/v1/grok", json={"prompt": prompt}, headers=headers)
         if response.status_code == 200:
             return response.json().get("response", "Следите за погодой и поливайте культуры.")
     except Exception as e:
@@ -110,15 +110,16 @@ async def daily_weather(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 # === Основная функция запуска бота ===
 async def main():
-    app = Application.builder().token(TELEGRAM_BOT_TOKEN).job_queue(True).build()
+    app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
     # Добавление обработчиков
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_handler(CallbackQueryHandler(button))
 
-    # Планирование ежедневных сообщений
-    app.job_queue.run_daily(daily_weather, time=dt_time(hour=7, minute=0))
+    # Планирование ежедневных сообщений (с учетом часового пояса Кыргызстана)
+    KYRGYZSTAN_TZ = timezone(timedelta(hours=6))
+    app.job_queue.run_daily(daily_weather, time=dt_time(hour=7, minute=0, tzinfo=KYRGYZSTAN_TZ))
 
     # Запуск бота
     await app.run_polling()
