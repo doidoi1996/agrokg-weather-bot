@@ -138,4 +138,15 @@ async def main():
     await app.run_polling()
 
 if __name__ == "__main__":
-    import asyncio
+    logging.info("Запуск бота...")
+
+    app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    app.add_handler(CallbackQueryHandler(button))
+
+    KYRGYZSTAN_TZ = timezone(timedelta(hours=6))
+    app.job_queue.run_daily(daily_weather, time=dt_time(hour=7, minute=0, tzinfo=KYRGYZSTAN_TZ))
+
+    app.run_polling()
