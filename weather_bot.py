@@ -119,7 +119,7 @@ async def main():
 
     # Планирование ежедневных сообщений (с учетом часового пояса Кыргызстана)
     KYRGYZSTAN_TZ = timezone(timedelta(hours=6))
-    app.job_queue.run_daily(daily_weather, time=dt_time(hour at 7, minute=0, tzinfo=KYRGYZSTAN_TZ))
+    app.job_queue.run_daily(daily_weather, time=dt_time(hour=7, minute=0, tzinfo=KYRGYZSTAN_TZ))
 
     # Запуск бота
     await app.run_polling()
