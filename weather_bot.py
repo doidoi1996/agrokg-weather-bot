@@ -117,7 +117,7 @@ async def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_handler(CallbackQueryHandler(button))
 
-    # Планирование ежедневных сообщений (с учетом часового пояса Кыргызстана)
+    # Планирование ежедневных сообщений
     KYRGYZSTAN_TZ = timezone(timedelta(hours=6))
     app.job_queue.run_daily(daily_weather, time=dt_time(hour=7, minute=0, tzinfo=KYRGYZSTAN_TZ))
 
@@ -125,4 +125,9 @@ async def main():
     await app.run_polling()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    # Используем существующий событийный цикл
+    loop = asyncio.get_event_loop()
+    if loop.is_running():
+        loop.create_task(main())
+    else:
+        loop.run_until_complete(main())
