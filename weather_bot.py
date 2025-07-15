@@ -1,32 +1,38 @@
 import asyncio
-import os
 import logging
+import os
 from datetime import datetime, time as dt_time, timezone, timedelta
 
 import requests
 import openai
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, ReplyKeyboardRemove
 from telegram.ext import (
     Application,
     CommandHandler,
     MessageHandler,
-    CallbackQueryHandler,
     filters,
-    ContextTypes
+    ContextTypes,
+    ConversationHandler,
 )
 
-# Настройки ключей
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "7303047610:AAHraj24cjD94JTOGb-9ncD9RY0GG1QO-j4")
-TELEGRAM_CHANNEL_ID = os.getenv("TELEGRAM_CHANNEL_ID", "@agrokg_msh")
-OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY", "31f0e42c1bc0d2e6301f9d0452b75ad1")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "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")
-
+# API Keys and Bot Token
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "YOUR_TELEGRAM_BOT_TOKEN")
+OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY", "YOUR_OPENWEATHER_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "YOUR_OPENAI_API_KEY")
 openai.api_key = OPENAI_API_KEY
 
-CITIES = ["Бишкек", "Аламедин", "Чуй", "Сокулук"]
-user_selected_city = {}  # запоминаем город пользователя по chat_id
+# States for conversation
+ASK_CITY, ASK_CROP = range(2)
 
-# Получение погоды
+# Logger
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# In-memory user state
+user_data = {}
+
+# Weather fetching
+
 def get_weather(city):
     url = f"https://api.openweathermap.org/data/2.5/weather?q={city},KG&appid={OPENWEATHER_API_KEY}&units=metric&lang=ru"
     response = requests.get(url)
@@ -40,16 +46,14 @@ def get_weather(city):
             "wind_speed": data["wind"]["speed"],
             "precipitation": data.get("rain", {}).get("1h", 0)
         }
-    else:
-        print(f"[!] Ошибка погоды ({city}): {response.status_code} - {response.text}")
     return None
 
-# Получение рекомендаций от OpenAI
+# Farming advice from OpenAI
+
 def get_farming_advice(weather_data, crop):
     prompt = (
-        f"Я фермер. Погода сейчас: {weather_data['description']}, "
-        f"температура {weather_data['temp']}°C, влажность {weather_data['humidity']}%. "
-        f"Я выращиваю {crop}. Дай советы по уходу за этой культурой в текущих условиях."
+        f"Я фермер. Погода сейчас: {weather_data['description']}, температура {weather_data['temp']}°C, "
+        f"влажность {weather_data['humidity']}%. Я выращиваю {crop}. Дай советы по уходу."
     )
     try:
         response = openai.ChatCompletion.create(
@@ -58,96 +62,73 @@ def get_farming_advice(weather_data, crop):
                 {"role": "system", "content": "Ты агроном-консультант. Дай практичные советы."},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=200
+            max_tokens=300
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
-        print(f"[!] Ошибка OpenAI: {e}")
+        logger.error(f"Ошибка OpenAI: {e}")
         return "Не удалось получить рекомендации от ИИ."
 
-# Форматирование сообщения
-def format_weather_message(city, weather_data, advice, crop=None):
-    base = (
+# Formatting message
+
+def format_weather_message(city, weather_data, advice, crop):
+    return (
         f"📍 Город: {city}\n"
-        f"🌤️ Погода на {datetime.now().strftime('%d.%m.%Y')}:\n"
-        f"Температура: {weather_data['temp']}°C (ощущается как {weather_data['feels_like']}°C)\n"
-        f"Состояние: {weather_data['description']}\n"
-        f"Влажность: {weather_data['humidity']}%\n"
-        f"Ветер: {weather_data['wind_speed']} м/с\n"
-        f"Осадки: {weather_data['precipitation']} мм\n\n"
+        f"🌤️ Погода: {weather_data['description']}, {weather_data['temp']}°C (ощущается как {weather_data['feels_like']}°C)\n"
+        f"💧 Влажность: {weather_data['humidity']}% | 🌬️ Ветер: {weather_data['wind_speed']} м/с | 🌧️ Осадки: {weather_data['precipitation']} мм\n\n"
+        f"🌾 Культура: *{crop}*\n🧠 Советы: {advice}"
     )
-    if crop:
-        base += f"🌾 Советы по культуре: *{crop}*\n{advice}"
-    else:
-        base += f"🌾 Общие рекомендации:\n{advice}"
-    return base
 
-# Команда /start
+# /start handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [[InlineKeyboardButton(city, callback_data=city)] for city in CITIES]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("Выберите ваш регион:", reply_markup=reply_markup)
+    await update.message.reply_text("Здравствуйте! Введите название вашего населенного пункта:")
+    return ASK_CITY
 
-# Кнопки выбора города
-async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    city = query.data
-    user_selected_city[query.from_user.id] = city
-    await query.message.reply_text(f"Вы выбрали: {city}. Теперь напишите, какую культуру вы выращиваете.")
+async def ask_crop(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    city = update.message.text.strip()
+    weather = get_weather(city)
+    if not weather:
+        await update.message.reply_text("❌ Город не найден. Попробуйте снова:")
+        return ASK_CITY
+    user_data[update.message.chat_id] = {"city": city, "weather": weather}
+    await update.message.reply_text("Какую культуру вы выращиваете?")
+    return ASK_CROP
 
-# Ответ на текст — культура
-async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.message.from_user.id
+async def send_advice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     crop = update.message.text.strip()
-    city = user_selected_city.get(user_id)
+    data = user_data.get(update.message.chat_id)
+    if not data:
+        await update.message.reply_text("Сначала введите команду /start")
+        return ConversationHandler.END
+    advice = get_farming_advice(data["weather"], crop)
+    message = format_weather_message(data["city"], data["weather"], advice, crop)
+    await update.message.reply_text(message, parse_mode="Markdown")
+    return ConversationHandler.END
 
-    if not city:
-        await update.message.reply_text("Сначала выберите город с помощью команды /start.")
-        return
+# Cancel
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Диалог отменён.", reply_markup=ReplyKeyboardRemove())
+    return ConversationHandler.END
 
-    weather_data = get_weather(city)
-    if weather_data:
-        advice = get_farming_advice(weather_data, crop)
-        message = format_weather_message(city, weather_data, advice, crop)
-        await update.message.reply_text(message, parse_mode="Markdown")
-    else:
-        await update.message.reply_text(f"Не удалось получить прогноз погоды для {city}.")
-
-# Ежедневная рассылка в канал
-async def daily_weather(context: ContextTypes.DEFAULT_TYPE):
-    for city in CITIES:
-        weather_data = get_weather(city)
-        if weather_data:
-            advice = get_farming_advice(weather_data, "пшеница")
-            message = format_weather_message(city, weather_data, advice)
-            await context.bot.send_message(chat_id=TELEGRAM_CHANNEL_ID, text=message)
-
-# Основной запуск
+# App init
 async def main():
-    logging.basicConfig(level=logging.INFO)
-    logging.info("Запуск бота...")
-
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(button))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
-    # Периодическая задача
-    KYRGYZ_TZ = timezone(timedelta(hours=6))
-    app.job_queue.run_daily(daily_weather, time=dt_time(hour=7, tzinfo=KYRGYZ_TZ))
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("start", start)],
+        states={
+            ASK_CITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_crop)],
+            ASK_CROP: [MessageHandler(filters.TEXT & ~filters.COMMAND, send_advice)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
 
+    app.add_handler(conv_handler)
+
+    # Запускаем бота
     await app.run_polling()
 
 if __name__ == "__main__":
-    import logging
     import nest_asyncio
-
-    logging.basicConfig(level=logging.INFO)
-    logging.info("Запуск бота...")
-
     nest_asyncio.apply()
-
-    asyncio.get_event_loop().run_until_complete(main())
-
-
+    asyncio.run(main())
