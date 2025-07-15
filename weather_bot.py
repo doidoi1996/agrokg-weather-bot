@@ -15,10 +15,10 @@ from telegram.ext import (
 import requests
 
 # === Конфигурация ===
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "7303047610:AAHraj24cjD94JTOGb-9ncD9RY0GG1QO-j4")
-TELEGRAM_CHANNEL_ID = os.getenv("TELEGRAM_CHANNEL_ID", "@agrokg_msh")
-OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY", "31f0e42c1bc0d2e6301f9d0452b75ad1")
-XAI_API_KEY = os.getenv("XAI_API_KEY", "xai-I7OLtQjEl3G2WUeEVmevXucGwByarxvvxWdcKXtr6N7DJFxnGLpIwepVDLc59gJuE34L47n7XWCECdx5")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHANNEL_ID = os.getenv("TELEGRAM_CHANNEL_ID")
+OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
+XAI_API_KEY = os.getenv("XAI_API_KEY")
 
 # === Города для кнопок ===
 CITIES = ["Бишкек", "Аламедин", "Чуй", "Сокулук"]
@@ -119,7 +119,7 @@ async def main():
 
     # Планирование ежедневных сообщений (с учетом часового пояса Кыргызстана)
     KYRGYZSTAN_TZ = timezone(timedelta(hours=6))
-    app.job_queue.run_daily(daily_weather, time=dt_time(hour=7, minute=0, tzinfo=KYRGYZSTAN_TZ))
+    app.job_queue.run_daily(daily_weather, time=dt_time(hour at 7, minute=0, tzinfo=KYRGYZSTAN_TZ))
 
     # Запуск бота
     await app.run_polling()
