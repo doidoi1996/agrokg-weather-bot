@@ -140,5 +140,14 @@ async def main():
     await app.run_polling()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    import logging
+    import nest_asyncio
+
+    logging.basicConfig(level=logging.INFO)
+    logging.info("Запуск бота...")
+
+    nest_asyncio.apply()
+
+    asyncio.get_event_loop().run_until_complete(main())
+
 
